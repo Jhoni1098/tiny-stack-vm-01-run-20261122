@@ -1,15 +1,17 @@
 import { readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 
+const I = process.env.MAKEFUN_INPUT_DIR ?? '/input';
+const O = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+
 const OUT_MAX = 65536;
 const STEP_MAX = 1000000;
 
-// Opcode byte -> immediate length, or -1 for an unknown opcode. One table read
-// replaces the per-step validity chain and length ternary in the hot loop.
+// Opcode -> immediate length (-1 = unknown).
 const IMM = new Int8Array(256).fill(-1);
 for (const b of [0, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 32, 33, 34, 48, 49, 50, 51, 52, 64, 65, 80, 81, 82, 83]) IMM[b] = 0;
 IMM[1] = 1; IMM[2] = 4; IMM[48] = IMM[49] = IMM[50] = IMM[51] = 2;
 
-// Run one program on its input. Returns { e: exit code, o: output bytes }.
+// Run one program; returns {e, o}.
 function run(p, g) {
   const n = p.length;
   const D = new Int32Array(256); // data stack
@@ -28,7 +30,7 @@ function run(p, g) {
     if (st === STEP_MAX) return end(10);
     if (pc < 0 || pc >= n) return end(9);
     const b = p[pc];
-    if (b === 1) { // PUSH8 fast path: 29% of practice steps
+    if (b === 1) { // PUSH8 fast path
       if (pc + 1 >= n) return end(9);
       if (sp > 255) return end(3);
       D[sp++] = (p[pc + 1] << 24) >> 24;
@@ -36,7 +38,7 @@ function run(p, g) {
       st++;
       continue;
     }
-    if (b === 48) { // JMP fast path: 15% of practice steps
+    if (b === 48) { // JMP fast path
       if (pc + 2 >= n) return end(9);
       pc += 3 + (((p[pc + 1] | (p[pc + 2] << 8)) << 16) >> 16);
       st++;
@@ -187,10 +189,10 @@ function run(p, g) {
   }
 }
 
-for (const id of readdirSync("/input").sort()) {
-  const dir = "/input/" + id;
+for (const id of readdirSync(I).sort()) {
+  const dir = I + "/" + id;
   const r = run(readFileSync(dir + "/program.bin"), readFileSync(dir + "/input.bin"));
-  mkdirSync("/output/" + id, { recursive: true });
-  writeFileSync("/output/" + id + "/stdout.bin", r.o);
-  writeFileSync("/output/" + id + "/exit.txt", String(r.e) + "\n");
+  mkdirSync(O + "/" + id, { recursive: true });
+  writeFileSync(O + "/" + id + "/stdout.bin", r.o);
+  writeFileSync(O + "/" + id + "/exit.txt", String(r.e) + "\n");
 }
